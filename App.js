@@ -32,7 +32,7 @@ export default function App() {
   },[])
 
   async function readUser() {
-    const user = AsyncStorage.getItem('user')
+    const user = await AsyncStorage.getItem('user')
     if (user) {
       setUser(JSON.parse(user))
     }
