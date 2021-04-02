@@ -1,10 +1,10 @@
-// @refresh reset
-import { StatusBar } from 'expo-status-bar';
-import React, {useState, useEffect} from 'react';
-import { StyleSheet, Text, TextInput, View, Button, LogBox } from 'react-native';
+// @refresh reset                                                                                 /* wipe react state of the component everytime we initialize the app */
+import React, {useState, useEffect, useCallback} from 'react';
+import { StyleSheet, TextInput, View, Button, LogBox } from 'react-native';
 import * as firebase from 'firebase';
 import 'firebase/firestore';
 import AsyncStorage from '@react-native-community/async-storage';
+import { GiftedChat } from 'react-native-gifted-chat';
 import { APIKEY, AUTHDOMAIN, PROJECTID, STORAGEBUCKET, MESSAGINGSENDERID, APPID } from '@env';
 
 // Your web app's Firebase configuration
@@ -17,12 +17,12 @@ const firebaseConfig = {
   appId: APPID
 };
 // Initialize Firebase
-if (firebase.app.length === 0) {
+if (firebase.apps.length === 0)
   firebase.initializeApp(firebaseConfig);
-}
 
 LogBox.ignoreLogs(['Setting a timer for a long period of time'])
 
+// Create a reference to the db collection
 const db = firebase.firestore()
 const chats = db.collection('chats')
 
@@ -33,6 +33,8 @@ export default function App() {
 
   useEffect(() => {
     readUser()
+    // OnSnapshot => Called every time we have a new update in the collection
+    // Unsubscribe => Called when we exit the component to prevent listening for updates all through 
     const unsubscribe = chats.onSnapshot((querySnapshot) => {
       const messagesFirestore = querySnapshot
         .docChanges()
@@ -42,9 +44,16 @@ export default function App() {
           return {...message, createdAt: message.createdAt.toDate()}
         })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      setMessages(messagesFirestore)  
+      appendMessages(messagesFirestore)  
     })
+
+    return () => unsubscribe()
   },[])
+
+  // Merge messages in one single array
+  const appendMessages = useCallback((messages) => {
+    setMessages((previousMessages) => GiftedChat.append(previousMessages, messages))
+  }, [messages])
 
   async function readUser() {
     const user = await AsyncStorage.getItem('user')
@@ -60,6 +69,11 @@ export default function App() {
     setUser(user)
   }
 
+  async function handleSend(messages) {
+    const writes = messages.map(m => chats.add(m)) // created an array of promises
+    await Promise.all(writes) // stores data to the db
+  }
+
   if (!user) {
     return (
       <View style={styles.container}>
@@ -69,12 +83,7 @@ export default function App() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <Text>We have a new user</Text>
-      <StatusBar style="auto" />
-    </View>
-  );
+  return <GiftedChat messages={messages} user={user} onSend={handleSend} />
 }
 
 const styles = StyleSheet.create({
